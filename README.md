@@ -1,5 +1,8 @@
 # real-estate-analytics-and-recommendation-system
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://real-estate-data-science-application-3gbgmpmtnuetxhuvrracam.streamlit.app/)
+🌍 **Live Demo:** [Click here to view the deployed application](https://real-estate-data-science-application-3gbgmpmtnuetxhuvrracam.streamlit.app/)
+
 An **end-to-end Data Science project** that analyzes real estate data, predicts property prices, and recommends properties based on user preferences.
 
 This project demonstrates the complete data science pipeline including **data collection, data cleaning, exploratory analysis, feature engineering, machine learning modeling, and deployment of a web application**.
