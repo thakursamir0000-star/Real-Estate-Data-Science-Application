@@ -1,0 +1,125 @@
+{
+  "trained_at": "2026-10-29T15:51:23+00:00",
+  "best_model": "xgboost",
+  "selection": {
+    "rule": "cheapest model whose CV MAE is within one standard error of the best",
+    "lowest_mae_model": "random_forest",
+    "threshold_mae_cr": 0.5385,
+    "eligible": [
+      "xgboost",
+      "extra_trees",
+      "random_forest",
+      "shipped_random_forest"
+    ]
+  },
+  "cv_folds": 10,
+  "data": {
+    "rows_raw": 3554,
+    "rows_after_dedup": 3520,
+    "duplicates_dropped": 34,
+    "flats": 2771,
+    "houses": 749
+  },
+  "target": "log1p(price in ₹ crore); metrics on the crore scale",
+  "models": {
+    "ridge": {
+      "mae_cr": 0.6592,
+      "rmse_cr": 1.5936,
+      "median_ape": 0.179,
+      "mape": 0.2725,
+      "r2_log": 0.8568,
+      "r2": 0.6744,
+      "mae_cr_fold_std": 0.0787,
+      "mae_cr_se": 0.0249,
+      "cv_seconds": 0.2
+    },
+    "shipped_random_forest": {
+      "mae_cr": 0.528,
+      "rmse_cr": 1.2011,
+      "median_ape": 0.1346,
+      "mape": 0.2238,
+      "r2_log": 0.8833,
+      "r2": 0.815,
+      "mae_cr_fold_std": 0.0597,
+      "mae_cr_se": 0.0189,
+      "cv_seconds": 2.1
+    },
+    "random_forest": {
+      "mae_cr": 0.5217,
+      "rmse_cr": 1.1967,
+      "median_ape": 0.14,
+      "mape": 0.2219,
+      "r2_log": 0.889,
+      "r2": 0.8164,
+      "mae_cr_fold_std": 0.0532,
+      "mae_cr_se": 0.0168,
+      "cv_seconds": 7.3
+    },
+    "extra_trees": {
+      "mae_cr": 0.5371,
+      "rmse_cr": 1.2435,
+      "median_ape": 0.1403,
+      "mape": 0.2237,
+      "r2_log": 0.8862,
+      "r2": 0.8017,
+      "mae_cr_fold_std": 0.0673,
+      "mae_cr_se": 0.0213,
+      "cv_seconds": 11.4
+    },
+    "xgboost": {
+      "mae_cr": 0.5286,
+      "rmse_cr": 1.1767,
+      "median_ape": 0.148,
+      "mape": 0.2252,
+      "r2_log": 0.8917,
+      "r2": 0.8224,
+      "mae_cr_fold_std": 0.0572,
+      "mae_cr_se": 0.0181,
+      "cv_seconds": 6.1
+    },
+    "lightgbm": {
+      "mae_cr": 0.5468,
+      "rmse_cr": 1.2131,
+      "median_ape": 0.1527,
+      "mape": 0.2304,
+      "r2_log": 0.8856,
+      "r2": 0.8113,
+      "mae_cr_fold_std": 0.0533,
+      "mae_cr_se": 0.0169,
+      "cv_seconds": 8.2
+    }
+  },
+  "intervals": {
+    "80": {
+      "log_half_width": {
+        "flat": 0.16456642575040858,
+        "house": 0.3293897962182033
+      },
+      "coverage": {
+        "overall": 0.8,
+        "flat": 0.8,
+        "house": 0.802
+      }
+    },
+    "90": {
+      "log_half_width": {
+        "flat": 0.22886713506052228,
+        "house": 0.47269402079444856
+      },
+      "coverage": {
+        "overall": 0.899,
+        "flat": 0.899,
+        "house": 0.9
+      }
+    }
+  },
+  "versions": {
+    "python": "3.13.7",
+    "scikit-learn": "1.8.0",
+    "xgboost": "3.2.0",
+    "lightgbm": "4.6.0",
+    "pandas": "2.3.3",
+    "numpy": "2.2.6"
+  },
+  "quick": false
+}

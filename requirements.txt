@@ -1,7 +1,11 @@
-pandas
-numpy
+# The saved model (models/price_model.joblib) was trained with these exact
+# scikit-learn and XGBoost versions; retrain with `python -m src.models.train_models`
+# before changing them.
 scikit-learn==1.8.0
-streamlit
-plotly
-wordcloud
-category_encoders
+xgboost==3.2.0
+lightgbm>=4.0,<5
+pandas>=2.2,<4
+numpy>=1.26
+joblib>=1.3
+streamlit>=1.50,<2
+plotly>=5.24,<7
