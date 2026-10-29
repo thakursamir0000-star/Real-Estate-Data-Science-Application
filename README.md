@@ -23,7 +23,7 @@
 
 | Module | What it does |
 |---|---|
-| 💰 **Price Predictor** | An estimate in ₹ crore, an **80% price range** that really contains the price ~80% of the time, and **what drives this price** (e.g. "sector 54: +70% vs a typical sector") |
+| 💰 **Price Predictor** | An estimate in ₹ crore, an **80% price range** that really contains the price ~80% of the time, and **what drives this price** (e.g. "sector 54: about twice the price of the same flat in a typical sector") |
 | 📊 **Analytics Dashboard** | A **map of price per sq ft by sector**, the most expensive sectors, price vs area and bedrooms, and the model comparison |
 | 🏡 **Recommend Properties** | **Similar listings** (same type, close in price, size, bedrooms, bathrooms) and **similar housing societies** by shared facilities, price level and nearby places, with the reasons for each match |
 
@@ -48,10 +48,12 @@ All models were scored with the same **10-fold cross-validation** on the 3,520 d
 
 **Calibrated price ranges.** Ranges are split-conformal intervals built from the out-of-fold residuals and calibrated **separately for flats and houses**, because house prices are about twice as hard to pin down. Coverage was checked honestly (each fold's width calibrated on the other nine folds):
 
-| Range | Width (flats) | Width (houses) | Real prices inside — flats / houses / all |
+| Range | Median-priced flat (₹1.40 Cr) | Median-priced house (₹4.05 Cr) | Real prices inside — flats / houses / all |
 |---|---|---|---|
-| 80% | −15% … +18% | −28% … +39% | 80.0% / 80.2% / 80.0% |
-| 90% | −20% … +26% | −38% … +60% | 89.9% / 90.0% / 89.9% |
+| 80% | ₹1.04–1.83 Cr (−26% … +31%) | ₹2.63–6.02 Cr (−35% … +49%) | 80.0% / 80.2% / 80.0% |
+| 90% | ₹0.91–2.02 Cr (−35% … +44%) | ₹2.15–7.10 Cr (−47% … +75%) | 89.9% / 90.0% / 89.9% |
+
+The model works on `log(1 + price)`, so in percentage terms ranges are wider for cheaper properties and narrower for expensive ones.
 
 **What didn't help, and why it's not used:**
 - *De-duplication* (34 exact duplicate rows) is done for correctness, but barely changed the scores here.
