@@ -30,6 +30,14 @@ def test_explanations_are_ranked_and_named(predictor, flat):
     assert drivers[0].feature == "sector"  # sector 54 is far from the typical sector
 
 
+def test_effects_are_on_the_price_itself(predictor, flat):
+    # The sector effect must equal the ratio of the two predicted prices.
+    sector = next(d for d in predictor.explain(flat) if d.feature == "sector")
+    typical_sector = predictor.predict({**flat, "sector": sector.typical}).price_cr
+    expected = (predictor.predict(flat).price_cr / typical_sector - 1) * 100
+    assert sector.effect_pct == pytest.approx(expected, abs=0.5)
+
+
 def test_a_typical_property_has_no_big_drivers(predictor):
     typical = predictor.typical_values("flat")
     assert all(abs(d.effect_pct) < 0.5 for d in predictor.explain({**typical, "property_type": "flat"}))
