@@ -102,10 +102,12 @@ class PricePredictor:
             row[feature] = typical[feature]
             variants.append((feature, row))
         batch = pd.concat([base] + [row for _, row in variants], ignore_index=True)
-        logs = self.predict_log(batch)
+        # Compare prices, not the model's log(1 + price) outputs: a ratio of
+        # (1 + price) values understates effects (e.g. +71% instead of +115%).
+        prices = np.maximum(np.expm1(self.predict_log(batch)), 1e-6)
         drivers = [
             Driver(feature, base.iloc[0][feature], typical[feature],
-                   round(float(np.expm1(logs[0] - logs[i + 1])) * 100, 1))
+                   round(float(prices[0] / prices[i + 1] - 1) * 100, 1))
             for i, (feature, _) in enumerate(variants)
         ]
         drivers = [d for d in drivers if abs(d.effect_pct) >= 0.5]
