@@ -1,55 +1,114 @@
-import streamlit as st
-import pickle
-import pandas as pd
-import numpy as np
+import sys
+from pathlib import Path
 
-import os
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from src.data.make_dataset import ALLOWED_VALUES, load_dataset  # noqa: E402
+from src.models.predict import PricePredictor  # noqa: E402
 
 st.set_page_config(page_title="Price Predictor", page_icon="💰")
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..', '..'))
-models_dir = os.path.join(project_root, 'models')
+NOISE_PCT = 5
+LABELS = {
+    "property_type": "Property type", "sector": "Sector", "bedRoom": "Bedrooms", "bathroom": "Bathrooms",
+    "balcony": "Balconies", "agePossession": "Age / possession", "built_up_area": "Built-up area",
+    "servant room": "Servant room", "store room": "Store room", "furnishing_type": "Furnishing",
+    "luxury_category": "Luxury level", "floor_category": "Floor",
+}
+
+
+def readable(feature: str, value) -> str:
+    if feature in ("servant room", "store room"):
+        return "Yes" if float(value) else "No"
+    if isinstance(value, (int, float)):
+        return f"{value:,.0f}" + (" sq ft" if feature == "built_up_area" else "")
+    return str(value)
+
+
+@st.cache_resource
+def get_predictor() -> PricePredictor:
+    return PricePredictor(reference=load_dataset())
+
 
 try:
-    with open(os.path.join(models_dir, 'pipeline.pkl'), 'rb') as file:
-        pipeline = pickle.load(file)
-    with open(os.path.join(models_dir, 'df.pkl'), 'rb') as file:
-        df = pickle.load(file)
-except Exception as e:
-    st.error(f"Error loading models: {e}. Please ensure train_models.py has been run.")
+    predictor = get_predictor()
+except FileNotFoundError:
+    st.error("No trained model found. Run `python -m src.models.train_models` first.")
     st.stop()
 
+data = predictor.reference
 st.title("💰 Property Price Predictor")
-st.write("Enter the details of the property to estimate its price in Crores.")
+st.write("Describe the property to get an estimate in ₹ crore, a likely price range, and what drives the price.")
 
 col1, col2 = st.columns(2)
-
 with col1:
-    property_type = st.selectbox("Property Type", sorted(df['property_type'].unique().tolist()))
-    sector = st.selectbox("Sector", sorted(df['sector'].unique().tolist()))
-    bedroom = st.number_input("Number of Bedrooms", min_value=1.0, max_value=20.0, value=2.0, step=1.0)
-    bathroom = st.number_input("Number of Bathrooms", min_value=1.0, max_value=20.0, value=2.0, step=1.0)
-    balcony = st.selectbox("Number of Balconies", sorted(df['balcony'].unique().tolist()))
-    agePossession = st.selectbox("Age of Property / Possession", sorted(df['agePossession'].unique().tolist()))
-
+    property_type = st.selectbox("Property type", ["flat", "house"])
+    sector = st.selectbox("Sector", sorted(data["sector"].unique()))
+    bedroom = st.number_input("Bedrooms", min_value=1, max_value=12, value=3)
+    bathroom = st.number_input("Bathrooms", min_value=1, max_value=12, value=3)
+    balcony = st.selectbox("Balconies", ["0", "1", "2", "3", "3+"], index=3)
+    age = st.selectbox("Age / possession", ["New Property", "Relatively New", "Moderately Old", "Old Property",
+                                            "Under Construction"], index=1)
 with col2:
-    built_up_area = st.number_input("Built Up Area (sq ft)", min_value=100.0, max_value=50000.0, value=1000.0, step=10.0)
-    servant_room = st.selectbox("Servant Room", [0.0, 1.0])
-    store_room = st.selectbox("Store Room", [0.0, 1.0])
-    furnishing_type = st.selectbox("Furnishing Type", sorted(df['furnishing_type'].unique().tolist()))
-    luxury_category = st.selectbox("Luxury Category", sorted(df['luxury_category'].unique().tolist()))
-    floor_category = st.selectbox("Floor Category", sorted(df['floor_category'].unique().tolist()))
+    area = st.number_input("Built-up area (sq ft)", min_value=200, max_value=20000, value=1650, step=50)
+    servant = st.checkbox("Servant room")
+    store = st.checkbox("Store room")
+    furnishing = st.selectbox("Furnishing", ["Unfurnished", "Semi-furnished", "Furnished"])
+    luxury = st.selectbox("Luxury level", sorted(ALLOWED_VALUES["luxury_category"], key=["Low", "Medium", "High"].index))
+    floor = st.selectbox("Floor", ["Low Floor", "Mid Floor", "High Floor"], index=1)
 
-if st.button("Predict Price", use_container_width=True):
-    input_df = pd.DataFrame(
-        [[property_type, sector, bedroom, bathroom, balcony, agePossession, built_up_area, servant_room, store_room, furnishing_type, luxury_category, floor_category]],
-        columns=['property_type', 'sector', 'bedRoom', 'bathroom', 'balcony', 'agePossession', 'built_up_area', 'servant room', 'store room', 'furnishing_type', 'luxury_category', 'floor_category']
+inputs = {
+    "property_type": property_type, "sector": sector, "bedRoom": bedroom, "bathroom": bathroom,
+    "balcony": balcony, "agePossession": age, "built_up_area": area, "servant room": float(servant),
+    "store room": float(store), "furnishing_type": furnishing, "luxury_category": luxury, "floor_category": floor,
+}
+
+if st.button("Predict price", width="stretch", type="primary"):
+    estimate = predictor.predict(inputs)
+    st.success(f"### Estimated price: ₹ {estimate.price_cr:.2f} Cr")
+    st.write(f"**Likely range ({estimate.level}%):** ₹ {estimate.low_cr:.2f} – {estimate.high_cr:.2f} Cr  ·  "
+             f"₹ {estimate.price_cr * 1e7 / area:,.0f} per sq ft")
+    st.caption(f"In cross-validation, {estimate.level}% ranges like this contained the real listed price "
+               f"{predictor.metrics['intervals'][str(estimate.level)]['coverage'][property_type]:.0%} of the time "
+               f"for {property_type}s.")
+
+    explained = predictor.explain(inputs, top=8)
+    # Effects this small are within the model's noise (e.g. a few % either way for ±70 sq ft),
+    # so they aren't presented as drivers.
+    drivers = [d for d in explained if abs(d.effect_pct) >= NOISE_PCT]
+    minor = [LABELS.get(d.feature, d.feature) for d in explained if abs(d.effect_pct) < NOISE_PCT]
+    if drivers:
+        st.subheader("What drives this price")
+        table = pd.DataFrame([{
+            "Feature": LABELS.get(d.feature, d.feature),
+            "This property": readable(d.feature, d.value),
+            "Typical": readable(d.feature, d.typical),
+            "Effect on price (%)": d.effect_pct,
+        } for d in drivers])
+        fig = px.bar(table, x="Effect on price (%)", y="Feature", orientation="h", text="Effect on price (%)",
+                     color=table["Effect on price (%)"] > 0, color_discrete_map={True: "#2e7d32", False: "#c62828"})
+        fig.update_layout(showlegend=False, yaxis={"categoryorder": "total ascending"}, height=320)
+        st.plotly_chart(fig, width="stretch")
+        st.caption("Each bar: how much higher (or lower) the estimate is than if only that feature had the most "
+                   f"common value for a {property_type} (the Typical column). Approximate, because features interact.")
+        st.dataframe(table, hide_index=True, width="stretch")
+    if minor:
+        st.caption(f"Little clear effect (under ±{NOISE_PCT}%): {', '.join(minor)}.")
+    if not drivers:
+        st.info("This property is close to a typical one: no feature moves the estimate by more than "
+                f"±{NOISE_PCT}%.")
+
+with st.expander("How accurate is the model?"):
+    m = predictor.metrics
+    best = m["models"][m["best_model"]]
+    st.write(
+        f"**{m['best_model']}**, chosen by {m['cv_folds']}-fold cross-validation on "
+        f"{m['data']['rows_after_dedup']:,} listings: mean absolute error ₹{best['mae_cr']:.2f} Cr, "
+        f"median error {best['median_ape']:.0%}, R² {best['r2_log']:.3f} (log price)."
     )
-    
-    try:
-        # Predict uses expm1 because the model was trained on log1p
-        predicted_price = np.expm1(pipeline.predict(input_df))[0]
-        st.success(f"Estimated Property Price: **₹ {predicted_price:.2f} Crores**")
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
+    st.write("Prices are listing prices from 99acres, not transaction prices.")
