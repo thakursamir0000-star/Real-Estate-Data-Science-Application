@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check .
+      - name: Validate data
+        run: python -m src.data.make_dataset
+      - name: Test
+        run: pytest
+      - name: Reproduce the committed model card
+        run: |
+          python -m src.models.train_models --out-dir /tmp/retrained
+          python - <<'EOF'
+          import json
+          committed = json.load(open("models/metrics.json"))
+          retrained = json.load(open("/tmp/retrained/metrics.json"))
+          for name, m in committed["models"].items():
+              new = retrained["models"][name]["mae_cr"]
+              drift = abs(new - m["mae_cr"]) / m["mae_cr"]
+              print(f"{name:22s} committed MAE {m['mae_cr']:.4f}  retrained {new:.4f}  drift {drift:.1%}")
+              assert drift < 0.03, f"{name} no longer reproduces the committed metrics"
+          assert retrained["best_model"] == committed["best_model"], "a different model would be chosen"
+          print("Model card reproduced.")
+          EOF
