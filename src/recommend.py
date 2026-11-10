@@ -33,12 +33,16 @@ SOCIETY_WEIGHTS = {"facilities": 30 / 58, "price": 20 / 58, "location": 8 / 58}
 # ── listings ────────────────────────────────────────────────────────
 
 def similar_listings(df: pd.DataFrame, index: int, n: int = 5, same_sector: bool = False) -> pd.DataFrame:
-    """The n listings most similar to df.loc[index], with a 0-1 similarity score."""
+    """The n listings most similar to df.loc[index], with a 0-1 similarity score.
+
+    With same_sector, only listings in the same sector are considered, so fewer
+    than n (or none) can come back. It used to fall back to every sector when
+    fewer than n matched, silently ignoring the filter.
+    """
     query = df.loc[index]
     pool = df[(df["property_type"] == query["property_type"]) & (df.index != index)]
     if same_sector:
-        in_sector = pool[pool["sector"] == query["sector"]]
-        pool = in_sector if len(in_sector) >= n else pool
+        pool = pool[pool["sector"] == query["sector"]]
     features = pd.DataFrame({
         "log_price": np.log(df["price"]), "log_area": np.log(df["built_up_area"]),
         "bedRoom": df["bedRoom"], "bathroom": df["bathroom"],
