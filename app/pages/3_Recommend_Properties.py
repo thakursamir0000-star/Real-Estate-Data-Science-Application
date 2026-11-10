@@ -41,6 +41,9 @@ with tab_listings:
     choice = st.selectbox("Listing", list(labels), format_func=labels.get)
     if choice is not None:
         matches = similar_listings(df, choice, n=8, same_sector=same_sector)
+        if same_sector and len(matches) < 8:
+            st.info(f"Only {len(matches)} other {property_type} listing(s) in {sector}. "
+                    "Turn off \"Only this sector\" to see similar listings elsewhere.")
         st.dataframe(
             matches[["similarity", "sector", "bedRoom", "bathroom", "built_up_area", "price",
                      "furnishing_type", "agePossession"]].rename(columns={

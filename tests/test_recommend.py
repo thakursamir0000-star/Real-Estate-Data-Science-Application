@@ -56,3 +56,14 @@ def test_society_recommendations(societies):
 def test_unknown_society(societies):
     with pytest.raises(KeyError):
         societies.recommend("Not A Real Society")
+
+
+def test_same_sector_filter_is_strict_even_when_the_sector_is_small(dataset):
+    # A review found "only this sector" silently returning other sectors when
+    # fewer than n listings matched (about a third of type/sector groups).
+    counts = dataset.groupby(["property_type", "sector"]).size()
+    small_type, small_sector = counts[counts.between(2, 4)].index[0]
+    index = dataset[(dataset["property_type"] == small_type) & (dataset["sector"] == small_sector)].index[0]
+    matches = similar_listings(dataset, index, n=5, same_sector=True)
+    assert 1 <= len(matches) < 5
+    assert (matches["sector"] == small_sector).all()

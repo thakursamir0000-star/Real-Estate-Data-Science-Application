@@ -74,7 +74,7 @@ The model works on `log(1 + price)`, so in percentage terms ranges are wider for
 - Most expensive sectors, price vs area (log scale), price by bedrooms, and the cross-validated model comparison.
 
 ### 🏡 Recommendations
-1. **Similar listings** — nearest neighbours among the same property type on *standardized* log price, log area, bedrooms and bathrooms (the original used raw values, so square feet swamped everything else), optionally within the same sector.
+1. **Similar listings** — nearest neighbours among the same property type on *standardized* log price, log area, bedrooms and bathrooms (the original used raw values, so square feet swamped everything else), optionally only within the same sector (then fewer than 8 can come back, and the app says so).
 2. **Similar housing societies** — 247 societies from `data/raw/appartments.csv`, blending facility overlap (52%), price level (34%) and shared nearby places (14%), the weights from `notebooks/recommender-system.ipynb`; each match lists the shared facilities and nearby places.
 
 ---
@@ -168,6 +168,7 @@ The tests cover data validation and coordinate parsing, the conformal-interval m
 - **Gurgaon only**; sectors with few listings get less reliable estimates (their ranges are not widened separately).
 - **Explanations are approximate** what-if effects, not causal effects.
 - **Society data** covers 247 societies and their listed facilities; some have no published prices.
+- **Feature selection saw all the data.** `notebooks/feature-selection.ipynb` dropped three weak yes/no columns (`pooja room`, `study room`, `others`) after comparing scores on all rows, before the 10-fold cross-validation reported above, so those scores may be slightly optimistic. The other notebook decisions don't use the target: dropping `society` and `price_per_sqft` (which leak the price) and replacing `floorNum` and `luxury_score` with categories. The pre-selection data isn't in the repo, so the effect can't be re-measured here; the fix is to select features inside each training fold.
 
 ---
 
