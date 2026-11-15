@@ -15,6 +15,7 @@ reasons returned alongside each recommendation.
 from __future__ import annotations
 
 import ast
+import csv
 import re
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from src.data.make_dataset import SOCIETIES_FILE
 SIMILARITY_FEATURES = ["log_price", "log_area", "bedRoom", "bathroom"]
 # Weights from recommender-system.ipynb (30 / 20 / 8), normalized
 SOCIETY_WEIGHTS = {"facilities": 30 / 58, "price": 20 / 58, "location": 8 / 58}
+SOCIETY_COLUMNS = ["name", "sector", "facilities", "places", "price_low", "price_high", "link"]
 
 
 # ── listings ────────────────────────────────────────────────────────
@@ -85,25 +87,71 @@ def _literal(text, default):
         return default
 
 
+def _is_repeated_header(row: pd.Series) -> bool:
+    """True for embedded CSV header rows, including partially populated copies."""
+    matches = sum(
+        pd.notna(value) and str(value).strip().casefold() == str(column).strip().casefold()
+        for column, value in row.items()
+    )
+    property_name = row.get("PropertyName")
+    return (pd.notna(property_name)
+            and str(property_name).strip().casefold() == "propertyname"
+            and matches >= 2)
+
+
+def _empty_societies() -> pd.DataFrame:
+    return pd.DataFrame(columns=SOCIETY_COLUMNS)
+
+
 def load_societies(path: Path = SOCIETIES_FILE) -> pd.DataFrame:
-    raw = pd.read_csv(path)
+    with Path(path).open(encoding="utf-8-sig", errors="replace", newline="") as source:
+        reader = csv.reader(source)
+        try:
+            columns = [str(column).strip() for column in next(reader)]
+        except (StopIteration, csv.Error):
+            return _empty_societies()
+        rows = []
+        try:
+            for row in reader:
+                if len(row) <= len(columns):
+                    rows.append([*row, *([None] * (len(columns) - len(row)))])
+        except csv.Error:
+            pass
+    raw = pd.DataFrame(rows, columns=columns)
+    if "PropertyName" not in raw.columns:
+        return _empty_societies()
+    raw = raw.loc[~raw.apply(_is_repeated_header, axis=1)]
+
     rows = []
-    for r in raw.itertuples():
-        prices = [p for detail in _literal(r.PriceDetails, {}).values()
+    for _, r in raw.iterrows():
+        if pd.isna(r["PropertyName"]) or not (name := str(r["PropertyName"]).strip()):
+            continue
+        price_details = _literal(r.get("PriceDetails"), {})
+        if not isinstance(price_details, dict):
+            price_details = {}
+        prices = [p for detail in price_details.values() if isinstance(detail, dict)
                   for p in parse_price_range(detail.get("price-range", ""))]
-        places = {place: d for place, text in _literal(r.LocationAdvantages, {}).items()
+        location_advantages = _literal(r.get("LocationAdvantages"), {})
+        if not isinstance(location_advantages, dict):
+            location_advantages = {}
+        places = {place: d for place, text in location_advantages.items()
                   if (d := parse_distance_km(text)) is not None}
-        sector = re.search(r" in (.+?), Gurgaon", str(r.PropertySubName))
+        facilities = _literal(r.get("TopFacilities"), [])
+        if not isinstance(facilities, (list, tuple, set)):
+            facilities = []
+        sector = re.search(r" in (.+?), Gurgaon", str(r.get("PropertySubName", "")))
         rows.append({
-            "name": r.PropertyName,
+            "name": name,
             "sector": sector.group(1).lower() if sector else "",
-            "facilities": list(_literal(r.TopFacilities, [])),
+            "facilities": list(facilities),
             "places": places,
             "price_low": min(prices) if prices else np.nan,
             "price_high": max(prices) if prices else np.nan,
-            "link": r.Link,
+            "link": "" if pd.isna(r.get("Link")) else str(r.get("Link", "")),
         })
-    return pd.DataFrame(rows).drop_duplicates("name").reset_index(drop=True)
+    if not rows:
+        return _empty_societies()
+    return pd.DataFrame(rows, columns=SOCIETY_COLUMNS).drop_duplicates("name").reset_index(drop=True)
 
 
 class SocietyRecommender:
@@ -118,11 +166,21 @@ class SocietyRecommender:
         proximity = np.array([[1 / (1 + d.get(p, np.inf)) for p in places] for d in s["places"]])
         self.location_sim = cosine_similarity(proximity) if places else np.zeros((len(s), len(s)))
 
-        level = np.log(((s["price_low"] + s["price_high"]) / 2).fillna(s["price_low"].median()))
-        self.price_sim = np.exp(-np.abs(level.to_numpy()[:, None] - level.to_numpy()[None, :]))
+        midpoint = (pd.to_numeric(s["price_low"], errors="coerce")
+                    + pd.to_numeric(s["price_high"], errors="coerce")) / 2
+        price_available = midpoint.notna() & midpoint.gt(0)
+        level = np.full(len(s), np.nan)
+        level[price_available] = np.log(midpoint[price_available])
+        price_pairs = price_available.to_numpy()[:, None] & price_available.to_numpy()[None, :]
+        self.price_sim = np.full((len(s), len(s)), np.nan)
+        differences = np.abs(level[:, None] - level[None, :])
+        self.price_sim[price_pairs] = np.exp(-differences[price_pairs])
 
         w = SOCIETY_WEIGHTS
-        self.similarity = w["facilities"] * self.facility_sim + w["price"] * self.price_sim + w["location"] * self.location_sim
+        weighted = w["facilities"] * self.facility_sim + w["location"] * self.location_sim
+        weighted += np.where(price_pairs, w["price"] * self.price_sim, 0)
+        available_weight = w["facilities"] + w["location"] + np.where(price_pairs, w["price"], 0)
+        self.similarity = weighted / available_weight
 
     def names(self) -> list[str]:
         return sorted(self.societies["name"])
@@ -150,7 +208,8 @@ class SocietyRecommender:
                 "shared_facilities": ", ".join(sorted(set(query["facilities"]) & set(other["facilities"]))[:5]),
                 "shared_nearby": ", ".join(shared_places[:3]),
                 "facilities_match": round(float(self.facility_sim[i, j]), 2),
-                "price_match": round(float(self.price_sim[i, j]), 2),
+                "price_match": (round(float(self.price_sim[i, j]), 2)
+                                if np.isfinite(self.price_sim[i, j]) else None),
                 "location_match": round(float(self.location_sim[i, j]), 2),
                 "link": other["link"],
             })
